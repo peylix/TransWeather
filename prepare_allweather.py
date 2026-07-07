@@ -14,7 +14,8 @@ conventions of the three source datasets:
   - Outdoor-Rain: im_<id>_s<..>_a<..>.<ext>  <->  im_<id>.<ext>
 
 Writes into <data_dir>:
-  - train.txt / val.txt      lines of "<input_path> <gt_path>"
+  - train.txt / val.txt      lines of "<input_path>\\t<gt_path>" (tab-separated,
+                             because e.g. Snow100K file names contain spaces)
   - val_<category>.txt       per-weather-type validation lists (when detected)
 """
 import argparse
@@ -118,7 +119,7 @@ def write_list(filename, pairs, gt_dir):
     path = os.path.join(data_dir, filename)
     with open(path, 'w') as fh:
         for input_name, gt_name in pairs:
-            fh.write('input/{} {}/{}\n'.format(input_name, gt_dir, gt_name))
+            fh.write('input/{0}\t{1}/{2}\n'.format(input_name, gt_dir, gt_name))
     return path
 
 

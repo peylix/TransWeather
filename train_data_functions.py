@@ -13,9 +13,10 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 def read_image_list(list_path):
     """Read an image list file.
 
-    Each line is either "<input_path> <gt_path>" or just "<input_path>",
-    in which case the ground-truth path is derived by replacing 'input'
-    with 'gt' (the original TransWeather convention).
+    Each line is either "<input_path>\\t<gt_path>" (tab-separated, so file
+    names may contain spaces) or just "<input_path>", in which case the
+    ground-truth path is derived by replacing 'input' with 'gt' (the
+    original TransWeather convention).
     """
     input_names, gt_names = [], []
     with open(list_path) as f:
@@ -23,10 +24,10 @@ def read_image_list(list_path):
             line = line.strip()
             if not line:
                 continue
-            parts = line.split()
-            if len(parts) == 2:
-                input_names.append(parts[0])
-                gt_names.append(parts[1])
+            if '\t' in line:
+                input_name, gt_name = line.split('\t', 1)
+                input_names.append(input_name.strip())
+                gt_names.append(gt_name.strip())
             else:
                 input_names.append(line)
                 gt_names.append(line.replace('input', 'gt'))
