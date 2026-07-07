@@ -76,7 +76,7 @@ Download the datasets and arrange them in the following format. T
 To train TransWeather on the All-Weather dataset (expects `./data/train/allweather.txt` listing the input images):
 
 ```bash
-python train.py -exp_name Transweather -train_batch_size 32 -epoch_start 0 -num_epochs 250
+python train.py -exp_name Transweather -train_batch_size 32 -epoch_start 0 -num_epochs 250 -train_data_dir /root/autodl-tmp/allweather -train_filename train.txt -val_data_dir /root/autodl-tmp/allweather -val_filename val.txt
 ```
 
 Checkpoints are saved to `./<exp_name>/latest` every epoch and to `./<exp_name>/best` whenever the validation PSNR improves. Training logs are written to `./training_log/<exp_name>_log.txt`.
