@@ -1,6 +1,7 @@
 import time
 import torch
 import argparse
+import sys
 import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
@@ -8,7 +9,7 @@ from torch.utils.data import DataLoader
 from train_data_functions import TrainData
 from val_data_functions import ValData
 from utils import to_psnr, print_log, validation, adjust_learning_rate
-from torchvision.models import vgg16
+from torchvision.models import vgg16, VGG16_Weights
 from perceptual import LossNetwork
 import os
 import numpy as np
@@ -28,7 +29,12 @@ parser.add_argument('-lambda_loss', help='Set the lambda in loss function', defa
 parser.add_argument('-val_batch_size', help='Set the validation/test batch size', default=1, type=int)
 parser.add_argument('-exp_name', help='directory for saving the networks of the experiment', type=str)
 parser.add_argument('-seed', help='set random seed', default=19, type=int)
+parser.add_argument('-num_workers', help='number of dataloader workers (use 0 on macOS/Windows)', default=8 if sys.platform == 'linux' else 0, type=int)
 parser.add_argument('-num_epochs', help='number of epochs', default=200, type=int)
+parser.add_argument('-train_data_dir', help='training dataset root', default='./data/train/', type=str)
+parser.add_argument('-val_data_dir', help='validation dataset root', default='./data/test/', type=str)
+parser.add_argument('-train_filename', help='text file listing the training images, inside train_data_dir', default='allweather.txt', type=str)
+parser.add_argument('-val_filename', help='text file listing the validation images, inside val_data_dir', default='raindroptesta.txt', type=str)
 
 args = parser.parse_args()
 
@@ -56,8 +62,9 @@ print('learning_rate: {}\ncrop_size: {}\ntrain_batch_size: {}\nval_batch_size: {
       train_batch_size, val_batch_size, lambda_loss))
 
 
-train_data_dir = './data/train/'
-val_data_dir = './data/test/'
+# trailing separator is required because the data loaders concatenate paths
+train_data_dir = os.path.join(os.path.expanduser(args.train_data_dir), '')
+val_data_dir = os.path.join(os.path.expanduser(args.val_data_dir), '')
 
 # --- Gpu device --- #
 device_ids = [Id for Id in range(torch.cuda.device_count())]
@@ -78,7 +85,7 @@ net = nn.DataParallel(net, device_ids=device_ids)
 
 
 # --- Define the perceptual loss network --- #
-vgg_model = vgg16(pretrained=True).features[:16]
+vgg_model = vgg16(weights=VGG16_Weights.IMAGENET1K_V1).features[:16]
 vgg_model = vgg_model.to(device)
 # vgg_model = nn.DataParallel(vgg_model, device_ids=device_ids)
 for param in vgg_model.parameters():
@@ -88,7 +95,7 @@ for param in vgg_model.parameters():
 if os.path.exists('./{}/'.format(exp_name))==False:     
     os.mkdir('./{}/'.format(exp_name))  
 try:
-    net.load_state_dict(torch.load('./{}/best'.format(exp_name)))
+    net.load_state_dict(torch.load('./{}/best'.format(exp_name), map_location=device))
     print('--- weight loaded ---')
 except:
     print('--- no weight loaded ---')
@@ -101,25 +108,25 @@ loss_network.eval()
 
 # --- Load training data and validation/test data --- #
 
-### The following file should be placed inside the directory "./data/train/"
+### The following file should be placed inside the directory train_data_dir
 
-labeled_name = 'allweather.txt'
+labeled_name = args.train_filename
 
-### The following files should be placed inside the directory "./data/test/"
+### The following files should be placed inside the directory val_data_dir
 
 # val_filename = 'val_list_rain800.txt'
-val_filename1 = 'raindroptesta.txt'
+val_filename1 = args.val_filename
 # val_filename2 = 'test1.txt'
 
 # --- Load training data and validation/test data --- #
-lbl_train_data_loader = DataLoader(TrainData(crop_size, train_data_dir,labeled_name), batch_size=train_batch_size, shuffle=True, num_workers=8)
+lbl_train_data_loader = DataLoader(TrainData(crop_size, train_data_dir,labeled_name), batch_size=train_batch_size, shuffle=True, num_workers=args.num_workers)
 
 ## Uncomment the other validation data loader to keep an eye on performance 
 ## but note that validating while training significantly increases the train time 
 
-# val_data_loader = DataLoader(ValData(val_data_dir,val_filename), batch_size=val_batch_size, shuffle=False, num_workers=8)
-val_data_loader1 = DataLoader(ValData(val_data_dir,val_filename1), batch_size=val_batch_size, shuffle=False, num_workers=8)
-# val_data_loader2 = DataLoader(ValData(val_data_dir,val_filename2), batch_size=val_batch_size, shuffle=False, num_workers=8)
+# val_data_loader = DataLoader(ValData(val_data_dir,val_filename), batch_size=val_batch_size, shuffle=False, num_workers=args.num_workers)
+val_data_loader1 = DataLoader(ValData(val_data_dir,val_filename1), batch_size=val_batch_size, shuffle=False, num_workers=args.num_workers)
+# val_data_loader2 = DataLoader(ValData(val_data_dir,val_filename2), batch_size=val_batch_size, shuffle=False, num_workers=args.num_workers)
 
 
 # --- Previous PSNR and SSIM in testing --- #
@@ -135,7 +142,7 @@ old_val_psnr1, old_val_ssim1 = validation(net, val_data_loader1, device, exp_nam
 # old_val_psnr2, old_val_ssim2 = validation(net, val_data_loader2, device, exp_name)
 
 # print('Rain 800 old_val_psnr: {0:.2f}, old_val_ssim: {1:.4f}'.format(old_val_psnr, old_val_ssim))
-print('Rain Drop old_val_psnr: {0:.2f}, old_val_ssim: {1:.4f}'.format(old_val_psnr1, old_val_ssim1))
+print('[{0}] old_val_psnr: {1:.2f}, old_val_ssim: {2:.4f}'.format(val_filename1, old_val_psnr1, old_val_ssim1))
 # print('Test1 old_val_psnr: {0:.2f}, old_val_ssim: {1:.4f}'.format(old_val_psnr2, old_val_ssim2))
 
 net.train()
@@ -188,7 +195,7 @@ for epoch in range(epoch_start,num_epochs):
     one_epoch_time = time.time() - start_time
     # print("Rain 800")
     # print_log(epoch+1, num_epochs, one_epoch_time, train_psnr, val_psnr, val_ssim, exp_name)
-    print("Rain Drop")
+    print("[{}]".format(val_filename1))
     print_log(epoch+1, num_epochs, one_epoch_time, train_psnr, val_psnr1, val_ssim1, exp_name)
     # print("Test1")
     # print_log(epoch+1, num_epochs, one_epoch_time, train_psnr, val_psnr2, val_ssim2, exp_name)

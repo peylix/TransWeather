@@ -1,6 +1,7 @@
 import time
 import torch
 import argparse
+import sys
 import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
@@ -8,7 +9,7 @@ from torch.utils.data import DataLoader
 from train_data_functions import TrainData
 from val_data_functions import ValData
 from utils import to_psnr, print_log, validation, adjust_learning_rate
-from torchvision.models import vgg16
+from torchvision.models import vgg16, VGG16_Weights
 from perceptual import LossNetwork
 import os
 import numpy as np
@@ -28,6 +29,7 @@ parser.add_argument('-lambda_loss', help='Set the lambda in loss function', defa
 parser.add_argument('-val_batch_size', help='Set the validation/test batch size', default=1, type=int)
 parser.add_argument('-exp_name', help='directory for saving the networks of the experiment', type=str)
 parser.add_argument('-seed', help='set random seed', default=19, type=int)
+parser.add_argument('-num_workers', help='number of dataloader workers (use 0 on macOS/Windows)', default=8 if sys.platform == 'linux' else 0, type=int)
 parser.add_argument('-num_epochs', help='number of epochs', default=200, type=int)
 
 args = parser.parse_args()
@@ -78,7 +80,7 @@ net = nn.DataParallel(net, device_ids=device_ids)
 
 
 # --- Define the perceptual loss network --- #
-vgg_model = vgg16(pretrained=True).features[:16]
+vgg_model = vgg16(weights=VGG16_Weights.IMAGENET1K_V1).features[:16]
 vgg_model = vgg_model.to(device)
 # vgg_model = nn.DataParallel(vgg_model, device_ids=device_ids)
 for param in vgg_model.parameters():
@@ -88,7 +90,7 @@ for param in vgg_model.parameters():
 if os.path.exists('./{}/'.format(exp_name))==False:     
     os.mkdir('./{}/'.format(exp_name))  
 try:
-    net.load_state_dict(torch.load('./{}/best'.format(exp_name)))
+    net.load_state_dict(torch.load('./{}/best'.format(exp_name), map_location=device))
     print('--- weight loaded ---')
 except:
     print('--- no weight loaded ---')
@@ -108,8 +110,8 @@ labeled_name = 'rain800.txt' # Change this based on the dataset you choose to tr
 val_filename1 = 'rain800_test.txt' # Change this based on the dataset you choose to test on
 
 # --- Load training data and validation/test data --- #
-lbl_train_data_loader = DataLoader(TrainData(crop_size, train_data_dir,labeled_name), batch_size=train_batch_size, shuffle=True, num_workers=8)
-val_data_loader1 = DataLoader(ValData(val_data_dir,val_filename1), batch_size=val_batch_size, shuffle=False, num_workers=8)
+lbl_train_data_loader = DataLoader(TrainData(crop_size, train_data_dir,labeled_name), batch_size=train_batch_size, shuffle=True, num_workers=args.num_workers)
+val_data_loader1 = DataLoader(ValData(val_data_dir,val_filename1), batch_size=val_batch_size, shuffle=False, num_workers=args.num_workers)
 
 # --- Previous PSNR and SSIM in testing --- #
 net.eval()

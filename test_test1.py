@@ -1,6 +1,7 @@
 import time
 import torch
 import argparse
+import sys
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from val_data_functions import ValData
@@ -15,6 +16,7 @@ parser = argparse.ArgumentParser(description='Hyper-parameters for network')
 parser.add_argument('-val_batch_size', help='Set the validation/test batch size', default=1, type=int)
 parser.add_argument('-exp_name', help='directory for saving the networks of the experiment', type=str)
 parser.add_argument('-seed', help='set random seed', default=19, type=int)
+parser.add_argument('-num_workers', help='number of dataloader workers (use 0 on macOS/Windows)', default=8 if sys.platform == 'linux' else 0, type=int)
 args = parser.parse_args()
 
 val_batch_size = args.val_batch_size
@@ -41,18 +43,18 @@ print(device)
 
 val_filename = 'test1.txt' ## This text file should contain all the names of the images and must be placed in ./data/test/ directory
 
-val_data_loader = DataLoader(ValData(val_data_dir,val_filename), batch_size=val_batch_size, shuffle=False, num_workers=8)
+val_data_loader = DataLoader(ValData(val_data_dir,val_filename), batch_size=val_batch_size, shuffle=False, num_workers=args.num_workers)
 
 # --- Define the network --- #
 
-net = Transweather().cuda()
+net = Transweather().to(device)
 
 
 net = nn.DataParallel(net, device_ids=device_ids)
 
 
 # --- Load the network weight --- #
-net.load_state_dict(torch.load('./{}/best'.format(exp_name)))
+net.load_state_dict(torch.load('./{}/best'.format(exp_name), map_location=device))
 
 # --- Use the evaluation model in testing --- #
 net.eval()

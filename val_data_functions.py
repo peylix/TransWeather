@@ -3,15 +3,13 @@ from PIL import Image
 from torchvision.transforms import Compose, ToTensor, Normalize
 import numpy as np
 
+from train_data_functions import read_image_list
+
 # --- Validation/test dataset --- #
 class ValData(data.Dataset):
     def __init__(self, val_data_dir,val_filename):
         super().__init__()
-        val_list = val_data_dir + val_filename
-        with open(val_list) as f:
-            contents = f.readlines()
-            input_names = [i.strip() for i in contents]
-            gt_names = [i.strip().replace('input','gt') for i in input_names]
+        input_names, gt_names = read_image_list(val_data_dir + val_filename)
 
         self.input_names = input_names
         self.gt_names = gt_names
@@ -20,8 +18,8 @@ class ValData(data.Dataset):
     def get_images(self, index):
         input_name = self.input_names[index]
         gt_name = self.gt_names[index]
-        input_img = Image.open(self.val_data_dir + input_name)
-        gt_img = Image.open(self.val_data_dir + gt_name)
+        input_img = Image.open(self.val_data_dir + input_name).convert('RGB')
+        gt_img = Image.open(self.val_data_dir + gt_name).convert('RGB')
 
         # Resizing image in the multiple of 16"
         wd_new,ht_new = input_img.size
@@ -33,8 +31,8 @@ class ValData(data.Dataset):
             wd_new = 1024
         wd_new = int(16*np.ceil(wd_new/16.0))
         ht_new = int(16*np.ceil(ht_new/16.0))
-        input_img = input_img.resize((wd_new,ht_new), Image.ANTIALIAS)
-        gt_img = gt_img.resize((wd_new, ht_new), Image.ANTIALIAS)
+        input_img = input_img.resize((wd_new,ht_new), Image.LANCZOS)
+        gt_img = gt_img.resize((wd_new, ht_new), Image.LANCZOS)
 
         # --- Transform to tensor --- #
         transform_input = Compose([ToTensor(), Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
