@@ -5,14 +5,14 @@ import sys
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from val_data_functions import ValData
-from utils import validation_val
+from measure import evaluate_loader, print_metric_summary, metric_summary_lines
 import os
 import numpy as np
 import random
 from transweather_model import Transweather
 
 # --- Parse hyper-parameters  --- #
-parser = argparse.ArgumentParser(description='Evaluate TransWeather on an arbitrary test/validation list')
+parser = argparse.ArgumentParser(description='Evaluate TransWeather (PSNR/SSIM/MAE/LPIPS/DISTS) on a test/validation list')
 parser.add_argument('-val_data_dir', help='dataset root the paths in the list file are relative to', required=True, type=str)
 parser.add_argument('-val_filename', help='text file listing the test images, inside val_data_dir', default='val.txt', type=str)
 parser.add_argument('-exp_name', help='directory of the experiment whose weights are loaded', type=str)
@@ -21,6 +21,8 @@ parser.add_argument('-category', help='subdirectory of ./results/ for the restor
 parser.add_argument('-val_batch_size', help='Set the validation/test batch size', default=1, type=int)
 parser.add_argument('-seed', help='set random seed', default=19, type=int)
 parser.add_argument('-num_workers', help='number of dataloader workers (use 0 on macOS/Windows)', default=8 if sys.platform == 'linux' else 0, type=int)
+parser.add_argument('-save_gt', help='also save the (resized) ground-truth images next to the results', action='store_true')
+parser.add_argument('-verbose', help='print the metrics of every image', action='store_true')
 args = parser.parse_args()
 
 val_batch_size = args.val_batch_size
@@ -67,13 +69,29 @@ net.load_state_dict(torch.load(checkpoint, map_location=device))
 # --- Use the evaluation model in testing --- #
 net.eval()
 
-os.makedirs('./results/{}/{}/'.format(category,exp_name), exist_ok=True)
+save_dir = './results/{}/{}/'.format(category, exp_name)
+os.makedirs(save_dir, exist_ok=True)
+gt_save_dir = None
+if args.save_gt:
+    gt_save_dir = './results/{}/{}_gt/'.format(category, exp_name)
+    os.makedirs(gt_save_dir, exist_ok=True)
 
 print('--- Testing starts! ---')
 print('checkpoint: {}, list: {}{}'.format(checkpoint, val_data_dir, val_filename))
 start_time = time.time()
-val_psnr, val_ssim = validation_val(net, val_data_loader, device, exp_name, category, save_tag=True)
+summary = evaluate_loader(net, val_data_loader, device,
+                          save_dir=save_dir, gt_save_dir=gt_save_dir, verbose=args.verbose)
 end_time = time.time() - start_time
-print('val_psnr: {0:.2f}, val_ssim: {1:.4f}'.format(val_psnr, val_ssim))
+
+print_metric_summary(summary, decimals=4, title='Testing set metrics (mean ± std):')
+print('total images: {}'.format(summary['count']))
 print('validation time is {0:.4f}'.format(end_time))
-print('restored images saved to ./results/{}/{}/'.format(category, exp_name))
+print('restored images saved to {}'.format(save_dir))
+
+# --- Write the metrics to a log file --- #
+metrics_path = os.path.join(save_dir, 'metrics_{}'.format(val_filename))
+with open(metrics_path, 'w') as f:
+    f.write('checkpoint: {}\nlist: {}{}\nimages: {}\n'.format(checkpoint, val_data_dir, val_filename, summary['count']))
+    for line in metric_summary_lines(summary, decimals=4):
+        f.write(line + '\n')
+print('metrics written to {}'.format(metrics_path))

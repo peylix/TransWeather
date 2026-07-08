@@ -113,6 +113,14 @@ python test.py -exp_name Transweather -val_data_dir /path/to/allweather -val_fil
 python test.py -exp_name Transweather -val_data_dir /path/to/allweather -val_filename val_snow.txt -category snow
 ```
 
+`test.py` reports PSNR, SSIM, MAE (all on the Y channel of YCbCr), LPIPS (AlexNet), and DISTS as mean ± std, saves the restored images as lossless PNGs to `./results/<category>/<exp_name>/`, and writes the summary to `metrics_<val_filename>` in the same directory. Add `-save_gt` to also save the (resized) ground truth, `-verbose` to print per-image metrics. LPIPS/DISTS download pretrained backbones on first use.
+
+To measure the same five metrics over two existing folders of restored/ground-truth image pairs (e.g. outputs of another baseline):
+
+```bash
+python measure.py -results_dir ./results/allweather/Transweather -gt_dir ./results/allweather/Transweather_gt
+```
+
 ## Evaluation:
 
 To evaluate a trained model on the test sets (expects the corresponding text file inside `./data/test/`), run one of:
