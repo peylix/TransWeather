@@ -98,7 +98,7 @@ first generate the train/val file lists (pairs input and ground truth by filenam
 python prepare_allweather.py -data_dir /path/to/allweather
 ```
 
-This writes `train.txt`, `val.txt`, and per-weather-type lists (`val_snow.txt`, `val_raindrop.txt`, `val_outdoorrain.txt`) into the dataset directory. Then train:
+This writes `train.txt`, `val.txt`, `test.txt` (the full set: every pair whose ground truth is in `gt/`), and per-weather-type lists (`val_snow.txt`, `test_snow.txt`, ...) into the dataset directory. Then train:
 
 ```bash
 python train.py -exp_name Transweather -train_batch_size 32 -num_epochs 250 \
@@ -109,8 +109,21 @@ python train.py -exp_name Transweather -train_batch_size 32 -num_epochs 250 \
 and evaluate (overall, or per weather type by swapping `-val_filename`):
 
 ```bash
-python test.py -exp_name Transweather -val_data_dir /path/to/allweather -val_filename val.txt
-python test.py -exp_name Transweather -val_data_dir /path/to/allweather -val_filename val_snow.txt -category snow
+python test.py -exp_name Transweather -val_data_dir /path/to/allweather -val_filename test.txt
+python test.py -exp_name Transweather -val_data_dir /path/to/allweather -val_filename test_snow.txt -category snow
+```
+
+Note: with this single-directory layout, `test.txt` overlaps with `train.txt` — evaluating a model on data it was trained on inflates the metrics. Keep the test images out of the training directory (or train on a separate dataset) if `gt/` is meant to be a held-out test set; the preparation script prints how many test pairs were seen during training.
+
+The subdirectory names are configurable, so the official test sets work without renaming anything — pass the degraded-image directory via `-input_subdir`:
+
+```bash
+# Raindrop test_a (data/ + gt/), Outdoor-Rain test (data/ + gt/), Snow100K-L (synthetic/ + gt/)
+python prepare_allweather.py -data_dir /path/to/raindrop_data/test_a -input_subdir data
+python prepare_allweather.py -data_dir /path/to/CVPR19RainTrain/test -input_subdir data
+python prepare_allweather.py -data_dir "/path/to/Snow100K-testset/.../test/Snow100K-L" -input_subdir synthetic
+
+python test.py -exp_name Transweather -val_data_dir /path/to/raindrop_data/test_a -val_filename test.txt -category raindrop
 ```
 
 `test.py` reports PSNR, SSIM, MAE (all on the Y channel of YCbCr), LPIPS (AlexNet), and DISTS as mean ± std, saves the restored images as lossless PNGs to `./results/<category>/<exp_name>/`, and writes the summary to `metrics_<val_filename>` in the same directory. Add `-save_gt` to also save the (resized) ground truth, `-verbose` to print per-image metrics. LPIPS/DISTS download pretrained backbones on first use.
