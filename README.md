@@ -126,6 +126,14 @@ python prepare_allweather.py -data_dir "/path/to/Snow100K-testset/.../test/Snow1
 python test.py -exp_name Transweather -val_data_dir /path/to/raindrop_data/test_a -val_filename test.txt -category raindrop
 ```
 
+Or run all three official test sets with a single command (generates the missing `test.txt` lists automatically and prints a combined summary at the end):
+
+```bash
+python test_all.py -exp_name Transweather -data_root /root/autodl-tmp
+```
+
+Individual directories can be overridden with `-raindrop_dir`, `-outdoorrain_dir`, `-snow_dir`; pass `-regen` to rebuild the pair lists.
+
 `test.py` reports PSNR, SSIM, MAE (all on the Y channel of YCbCr), LPIPS (AlexNet), and DISTS as mean ± std, saves the restored images as lossless PNGs to `./results/<category>/<exp_name>/`, and writes the summary to `metrics_<val_filename>` in the same directory. Add `-save_gt` to also save the (resized) ground truth, `-verbose` to print per-image metrics. LPIPS/DISTS download pretrained backbones on first use.
 
 To measure the same five metrics over two existing folders of restored/ground-truth image pairs (e.g. outputs of another baseline):
