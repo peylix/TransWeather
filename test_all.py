@@ -23,6 +23,9 @@ parser.add_argument('-outdoorrain_dir', help='Outdoor-Rain test directory (defau
 parser.add_argument('-snow_dir', help='Snow100K-L test directory (default: <data_root>/Snow100K-testset/jdway/GameSSD/overlapping/test/Snow100K-L)', default=None, type=str)
 parser.add_argument('-val_batch_size', help='test batch size', default=1, type=int)
 parser.add_argument('-regen', help='regenerate test.txt even if it already exists', action='store_true')
+parser.add_argument('-results_dir', help='root directory for the restored images and metrics files (put this on a large disk for big test sets)', default='./results/', type=str)
+parser.add_argument('-no_save', help='compute the metrics without saving the restored images', action='store_true')
+parser.add_argument('-skip', help='test sets to skip (space-separated: raindrop outdoorrain snow100k_L)', nargs='+', default=[], type=str)
 args = parser.parse_args()
 
 if args.checkpoint is None and args.exp_name is None:
@@ -63,8 +66,15 @@ exp_name = args.exp_name
 if exp_name is None:
     exp_name = os.path.basename(os.path.dirname(os.path.abspath(args.checkpoint)))
 
+results_root = os.path.expanduser(args.results_dir)
+if not os.path.isabs(results_root):
+    results_root = os.path.join(script_dir, results_root)
+
 summaries = []
 for ts in TEST_SETS:
+    if ts['name'] in args.skip:
+        print('\n===== {} skipped (-skip) ====='.format(ts['name']))
+        continue
     print('\n===== {} ({}) ====='.format(ts['name'], ts['dir']))
     if not os.path.isdir(ts['dir']):
         raise SystemExit('test set directory not found: {}'.format(ts['dir']))
@@ -78,14 +88,17 @@ for ts in TEST_SETS:
     # --- Evaluate --- #
     cmd = [sys.executable, 'test.py',
            '-val_data_dir', ts['dir'], '-val_filename', 'test.txt',
-           '-category', ts['name'], '-val_batch_size', str(args.val_batch_size)]
+           '-category', ts['name'], '-val_batch_size', str(args.val_batch_size),
+           '-results_dir', results_root]
+    if args.no_save:
+        cmd += ['-no_save']
     if args.checkpoint:
         cmd += ['-checkpoint', args.checkpoint]
     else:
         cmd += ['-exp_name', args.exp_name]
     run(cmd)
 
-    summaries.append((ts['name'], os.path.join(script_dir, 'results', ts['name'], exp_name,
+    summaries.append((ts['name'], os.path.join(results_root, ts['name'], exp_name,
                                                'metrics_test.txt')))
 
 print('\n===== All test sets finished. Summary =====')

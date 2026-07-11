@@ -23,6 +23,8 @@ parser.add_argument('-seed', help='set random seed', default=19, type=int)
 parser.add_argument('-num_workers', help='number of dataloader workers (use 0 on macOS/Windows)', default=8 if sys.platform == 'linux' else 0, type=int)
 parser.add_argument('-save_gt', help='also save the (resized) ground-truth images next to the results', action='store_true')
 parser.add_argument('-verbose', help='print the metrics of every image', action='store_true')
+parser.add_argument('-results_dir', help='root directory for the restored images and metrics file (put this on a large disk for big test sets)', default='./results/', type=str)
+parser.add_argument('-no_save', help='compute the metrics without saving the restored images (the metrics file is still written)', action='store_true')
 args = parser.parse_args()
 
 val_batch_size = args.val_batch_size
@@ -69,11 +71,13 @@ net.load_state_dict(torch.load(checkpoint, map_location=device))
 # --- Use the evaluation model in testing --- #
 net.eval()
 
-save_dir = './results/{}/{}/'.format(category, exp_name)
-os.makedirs(save_dir, exist_ok=True)
+results_root = os.path.expanduser(args.results_dir)
+out_dir = os.path.join(results_root, category, exp_name)
+os.makedirs(out_dir, exist_ok=True)
+save_dir = None if args.no_save else out_dir
 gt_save_dir = None
-if args.save_gt:
-    gt_save_dir = './results/{}/{}_gt/'.format(category, exp_name)
+if args.save_gt and not args.no_save:
+    gt_save_dir = os.path.join(results_root, category, exp_name + '_gt')
     os.makedirs(gt_save_dir, exist_ok=True)
 
 print('--- Testing starts! ---')
@@ -86,10 +90,13 @@ end_time = time.time() - start_time
 print_metric_summary(summary, decimals=4, title='Testing set metrics (mean ± std):')
 print('total images: {}'.format(summary['count']))
 print('validation time is {0:.4f}'.format(end_time))
-print('restored images saved to {}'.format(save_dir))
+if save_dir:
+    print('restored images saved to {}'.format(save_dir))
+else:
+    print('restored images were not saved (-no_save)')
 
 # --- Write the metrics to a log file --- #
-metrics_path = os.path.join(save_dir, 'metrics_{}'.format(val_filename))
+metrics_path = os.path.join(out_dir, 'metrics_{}'.format(val_filename))
 with open(metrics_path, 'w') as f:
     f.write('checkpoint: {}\nlist: {}{}\nimages: {}\n'.format(checkpoint, val_data_dir, val_filename, summary['count']))
     for line in metric_summary_lines(summary, decimals=4):
