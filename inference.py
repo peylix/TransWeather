@@ -70,6 +70,8 @@ print(device)
 # --- Define the network --- #
 net = Transweather().to(device)
 net = nn.DataParallel(net, device_ids=device_ids)
+total_params = sum(parameter.numel() for parameter in net.parameters())
+print('Total parameters: {:.2f} M'.format(total_params / 1e6))
 
 # --- Load the network weight --- #
 net.load_state_dict(torch.load(args.checkpoint, map_location=device))
@@ -89,16 +91,29 @@ os.makedirs(args.output_dir, exist_ok=True)
 print('--- Inference starts! ---')
 total_time = 0
 with torch.no_grad():
-    for path in image_paths:
+    for image_index, path in enumerate(image_paths):
         input_im = load_image(path, device)
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
         start_time = time.time()
         pred_image = net(input_im)
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
         spent = time.time() - start_time
-        total_time += spent
+        if image_index > 0:
+            total_time += spent
 
         save_name = os.path.splitext(os.path.basename(path))[0] + '.png'
         tvu.save_image(pred_image, os.path.join(args.output_dir, save_name))
         print('processed {} ({:.4f}s)'.format(path, spent))
 
-print('average inference time is {0:.4f}s, total image is {1}'.format(total_time / len(image_paths), len(image_paths)))
+measured_images = max(len(image_paths) - 1, 0)
+if measured_images > 0:
+    print('average inference time (excluding first image) is {0:.4f}s, '
+          'total inference time (excluding first image) is {1:.4f}s, '
+          'images included in average is {2}'.format(
+              total_time / measured_images, total_time, measured_images))
+else:
+    print('average inference time (excluding first image) is not calculated; '
+          'images included in average is 0')
 print('restored images saved to {}'.format(args.output_dir))
