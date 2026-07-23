@@ -12,6 +12,7 @@ Can also be run standalone to compare two folders of same-sized images
 """
 import argparse
 import os
+import time
 
 import cv2
 import numpy as np
@@ -144,12 +145,26 @@ def evaluate_loader(net, val_data_loader, device, save_dir=None, gt_save_dir=Non
     computer = PerceptualMetricComputer(device=device)
     values = {name: [] for name in METRICS}
     count = 0
+    # inference-time accounting; the first batch is dropped from the average
+    # because its forward pass includes one-time CUDA warm-up/allocation cost
+    infer_time_total = 0.0
+    infer_images = 0
 
     for batch_id, val_data in enumerate(val_data_loader):
         input_im, gt, names = val_data
         input_im = input_im.to(device)
         gt = gt.to(device)
+
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        start_time = time.time()
         pred = net(input_im)
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        spent = time.time() - start_time
+        if batch_id > 0:
+            infer_time_total += spent
+            infer_images += int(input_im.shape[0])
 
         for b in range(pred.shape[0]):
             pred_bgr = tensor_to_bgr_image(pred[b]).astype(np.uint8)
@@ -175,6 +190,9 @@ def evaluate_loader(net, val_data_loader, device, save_dir=None, gt_save_dir=Non
 
     summary = summarize_all(values)
     summary['count'] = count
+    summary['infer_time_total'] = infer_time_total
+    summary['infer_images'] = infer_images
+    summary['infer_time_avg'] = infer_time_total / infer_images if infer_images else float('nan')
     return summary
 
 

@@ -64,6 +64,8 @@ val_data_loader = DataLoader(ValData(val_data_dir,val_filename), batch_size=val_
 net = Transweather().to(device)
 
 net = nn.DataParallel(net, device_ids=device_ids)
+total_params = sum(parameter.numel() for parameter in net.parameters())
+print('Total parameters: {:.2f} M'.format(total_params / 1e6))
 
 # --- Load the network weight --- #
 net.load_state_dict(torch.load(checkpoint, map_location=device))
@@ -90,6 +92,15 @@ end_time = time.time() - start_time
 print_metric_summary(summary, decimals=4, title='Testing set metrics (mean ± std):')
 print('total images: {}'.format(summary['count']))
 print('validation time is {0:.4f}'.format(end_time))
+
+# --- Inference speed (forward pass only, first image excluded as warm-up) --- #
+if summary['infer_images'] > 0:
+    print('average inference time (excluding first image) is {0:.4f}s over {1} images '
+          '({2:.2f} FPS)'.format(summary['infer_time_avg'], summary['infer_images'],
+                                 1.0 / summary['infer_time_avg']))
+else:
+    print('average inference time not computed (need at least 2 images)')
+
 if save_dir:
     print('restored images saved to {}'.format(save_dir))
 else:
@@ -101,4 +112,8 @@ with open(metrics_path, 'w') as f:
     f.write('checkpoint: {}\nlist: {}{}\nimages: {}\n'.format(checkpoint, val_data_dir, val_filename, summary['count']))
     for line in metric_summary_lines(summary, decimals=4):
         f.write(line + '\n')
+    f.write('params (M): {:.2f}\n'.format(total_params / 1e6))
+    if summary['infer_images'] > 0:
+        f.write('avg inference time (s, first image excluded): {:.4f} over {} images ({:.2f} FPS)\n'.format(
+            summary['infer_time_avg'], summary['infer_images'], 1.0 / summary['infer_time_avg']))
 print('metrics written to {}'.format(metrics_path))
